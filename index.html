@@ -181,7 +181,7 @@
         .form-group input:focus, .form-group select:focus, .form-group textarea:focus { border-color: var(--accent); }
         .form-group select option { background: var(--bg-color); color: white; }
 
-        /* Chips UI for Multi-Select */
+        /* Chips UI */
         .chip-container { background: rgba(0,0,0,0.2); border: 1px solid var(--glass-border); border-radius: 8px; padding: 1rem; margin-bottom: 1.2rem; }
         .chip-container h4 { font-size: 0.85rem; color: var(--text-muted); margin-bottom: 0.8rem; font-weight: normal; }
         .chip-group { display: flex; flex-wrap: wrap; gap: 0.5rem; }
@@ -216,7 +216,7 @@
         <h1>Content Planner</h1>
         <div class="header-actions">
             
-            <span id="syncStatus" onclick="pullFromCloud()" title="Click to force refresh from cloud">Local Only</span>
+            <span id="syncStatus" onclick="pullFromCloud(false, true)" title="Click to force refresh from cloud">Local Only</span>
 
             <div class="filter-group">
                 <select id="filterType" class="glass-select" onchange="renderBoard()">
@@ -391,11 +391,11 @@
         settings.priorities = ["High", "Medium", "Low"]; 
         let ideas = JSON.parse(localStorage.getItem('contentPlannerIdeas')) || [];
 
-        // --- SILENT MIGRATION: Convert old properties ---
+        // --- SILENT MIGRATION ---
         ideas = ideas.map(idea => {
             if (idea.platform && !idea.platforms) idea.platforms = [idea.platform];
             if (idea.channel && !idea.channels) idea.channels = [idea.channel];
-            if (idea.notes === undefined) idea.notes = ''; // Add notes property if missing
+            if (idea.notes === undefined) idea.notes = ''; 
             delete idea.platform; 
             delete idea.channel;
             return idea;
@@ -415,6 +415,13 @@
             renderBoard(); 
             pullFromCloud();
         }
+
+        // --- SMART SYNC: Auto-pull when user returns to the app/tab ---
+        document.addEventListener("visibilitychange", () => {
+            if (document.visibilityState === "visible") {
+                pullFromCloud();
+            }
+        });
 
         // --- GitHub Cloud Sync Engine ---
         function getGithubAuth() {
@@ -437,18 +444,31 @@
             localStorage.setItem('cp_gh_token', token);
             localStorage.setItem('cp_gh_gist_id', gistId);
             closeModals();
-            pullFromCloud(true);
+            pullFromCloud(true, true);
         }
 
-        async function pullFromCloud(isInitialSetup = false) {
+        // isInitialSetup handles empty gists. forceUpdate ignores matching local data.
+        async function pullFromCloud(isInitialSetup = false, forceUpdate = false) {
             const auth = getGithubAuth();
             if(!auth.token || !auth.gistId) return;
+
+            // Do not pull if the user is in the middle of dragging a card, it will glitch the UI
+            if (document.querySelector('.dragging')) return;
 
             document.getElementById('syncStatus').textContent = '⏳ Pulling...';
 
             try {
-                const response = await fetch(`https://api.github.com/gists/${auth.gistId}`, {
-                    headers: { 'Authorization': `token ${auth.token}`, 'Accept': 'application/vnd.github.v3+json', 'Cache-Control': 'no-cache' }
+                // CACHE BUSTER: Adds a random timestamp to the URL to completely bypass GitHub's aggressive edge cache
+                const cacheBuster = new Date().getTime(); 
+                
+                const response = await fetch(`https://api.github.com/gists/${auth.gistId}?cb=${cacheBuster}`, {
+                    headers: { 
+                        'Authorization': `token ${auth.token}`, 
+                        'Accept': 'application/vnd.github.v3+json', 
+                        'Cache-Control': 'no-cache, no-store, must-revalidate',
+                        'Pragma': 'no-cache',
+                        'Expires': '0'
+                    }
                 });
 
                 if(response.ok) {
@@ -457,6 +477,16 @@
                         const contentStr = data.files[GIST_FILENAME].content;
                         if(contentStr && contentStr.trim() !== '{}') {
                             const cloudData = JSON.parse(contentStr);
+                            
+                            // Prevent UI flashing if the cloud data is identical to what we already have
+                            const localDataStr = JSON.stringify({settings: settings, ideas: ideas});
+                            const incomingDataStr = JSON.stringify({settings: cloudData.settings, ideas: cloudData.ideas});
+                            
+                            if (localDataStr === incomingDataStr && !forceUpdate) {
+                                document.getElementById('syncStatus').textContent = '☁️ Synced';
+                                return; 
+                            }
+
                             if(cloudData.settings && cloudData.ideas) {
                                 settings = cloudData.settings;
                                 ideas = cloudData.ideas.map(idea => {
@@ -624,7 +654,6 @@
                     const platformsHtml = (idea.platforms || []).map(p => `<span class="tag">${p}</span>`).join('');
                     const channelsHtml = (idea.channels || []).map(c => `<span class="tag" style="border-color: var(--accent); color: white;">${c}</span>`).join('');
                     
-                    // Notes Preview
                     const notesHtml = idea.notes ? `<div class="card-notes">${idea.notes}</div>` : '';
 
                     card.innerHTML = `
