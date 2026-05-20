@@ -1,0 +1,950 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Content Planner | Workspace</title>
+    <style>
+        :root {
+            --bg-color: #0f172a;
+            --glass-bg: rgba(255, 255, 255, 0.05);
+            --glass-border: rgba(255, 255, 255, 0.1);
+            --glass-shadow: 0 4px 30px rgba(0, 0, 0, 0.1);
+            --text-main: #f8fafc;
+            --text-muted: #94a3b8;
+            --accent: #3b82f6;
+            --accent-hover: #2563eb;
+            --danger: #ef4444;
+            --success: #10b981;
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; }
+
+        body {
+            background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+            color: var(--text-main);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            overflow-x: hidden;
+        }
+
+        .glass {
+            background: var(--glass-bg);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid var(--glass-border);
+            border-radius: 12px;
+            box-shadow: var(--glass-shadow);
+        }
+
+        header {
+            padding: 1.5rem 2rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid var(--glass-border);
+            background: rgba(15, 23, 42, 0.8);
+            backdrop-filter: blur(10px);
+            position: sticky;
+            top: 0;
+            z-index: 100;
+            flex-wrap: wrap;
+            gap: 1rem;
+        }
+
+        .header-actions { 
+            display: flex; 
+            gap: 0.8rem; 
+            align-items: center; 
+            flex-wrap: wrap;
+        }
+
+        button, .glass-select {
+            background: rgba(255, 255, 255, 0.1);
+            color: white;
+            border: 1px solid var(--glass-border);
+            padding: 0.6rem 1rem;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: 500;
+            transition: all 0.2s ease;
+            outline: none;
+            font-size: 0.85rem;
+        }
+
+        button:hover, .glass-select:hover { background: rgba(255, 255, 255, 0.15); }
+        button.primary { background: var(--accent); border-color: var(--accent); }
+        button.primary:hover { background: var(--accent-hover); }
+
+        .glass-select option { background: var(--bg-color); color: white; }
+        .filter-group { display: flex; gap: 0.5rem; padding-right: 1rem; border-right: 1px solid rgba(255,255,255,0.1); }
+
+        button.danger-sm {
+            background: rgba(239, 68, 68, 0.2); color: #fca5a5;
+            border: none; padding: 0.2rem 0.6rem; border-radius: 4px; font-size: 0.8rem;
+        }
+        button.danger-sm:hover { background: rgba(239, 68, 68, 0.4); }
+
+        /* Sync Indicator */
+        #syncStatus {
+            font-size: 0.85rem; color: var(--text-muted); cursor: pointer;
+            padding: 0.4rem 0.8rem; border-radius: 20px;
+            background: rgba(0,0,0,0.2); transition: all 0.2s;
+        }
+        #syncStatus:hover { background: rgba(0,0,0,0.4); color: white; }
+
+        /* Board */
+        .board-container {
+            display: flex; gap: 1.5rem; padding: 2rem; overflow-x: auto; flex-grow: 1; align-items: flex-start;
+        }
+        .board-container::-webkit-scrollbar { height: 8px; }
+        .board-container::-webkit-scrollbar-track { background: rgba(255,255,255,0.05); }
+        .board-container::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.2); border-radius: 4px; }
+
+        .column {
+            min-width: 320px; max-width: 320px; display: flex; flex-direction: column; padding: 1rem; max-height: 85vh;
+        }
+
+        .column-header {
+            display: flex; justify-content: space-between; align-items: center; padding-bottom: 0.8rem;
+            border-bottom: 1px solid var(--glass-border); margin-bottom: 1rem;
+            font-weight: 600; color: var(--text-muted); text-transform: uppercase; font-size: 0.85rem; letter-spacing: 1px;
+        }
+
+        .column-body {
+            display: flex; flex-direction: column; gap: 1rem; flex-grow: 1; min-height: 150px;
+            padding-bottom: 2rem; overflow-y: auto;
+        }
+        .column-body::-webkit-scrollbar { width: 4px; }
+        .column-body::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 4px; }
+
+        .card {
+            padding: 1.2rem; cursor: grab; transition: transform 0.2s ease, box-shadow 0.2s ease, opacity 0.2s;
+            background: rgba(255, 255, 255, 0.08);
+        }
+        .card:active { cursor: grabbing; }
+        .card:hover:not(.dragging) {
+            transform: translateY(-2px); box-shadow: 0 8px 30px rgba(0, 0, 0, 0.3); background: rgba(255, 255, 255, 0.12);
+        }
+        .card.dragging { opacity: 0.4; transform: scale(0.95); border: 1px dashed var(--accent); box-shadow: none; }
+
+        .card-title { font-size: 1.1rem; font-weight: 500; margin-bottom: 0.6rem; line-height: 1.4; }
+        
+        .card-notes {
+            font-size: 0.85rem; color: var(--text-muted); margin-bottom: 0.8rem; line-height: 1.4;
+            display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden;
+            white-space: pre-wrap; font-style: italic; background: rgba(0,0,0,0.15);
+            padding: 0.5rem; border-radius: 6px; border-left: 2px solid var(--glass-border);
+        }
+
+        .tags { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-bottom: 0.8rem; }
+        .tag {
+            font-size: 0.75rem; padding: 0.2rem 0.6rem; border-radius: 20px;
+            background: rgba(255,255,255,0.1); color: #cbd5e1; border: 1px solid rgba(255,255,255,0.05);
+        }
+        
+        .tag.priority-high { background: rgba(239, 68, 68, 0.2); color: #fca5a5; border-color: rgba(239, 68, 68, 0.3); }
+        .tag.priority-medium { background: rgba(245, 158, 11, 0.2); color: #fcd34d; border-color: rgba(245, 158, 11, 0.3); }
+        .tag.priority-low { background: rgba(16, 185, 129, 0.2); color: #6ee7b7; border-color: rgba(16, 185, 129, 0.3); }
+        
+        .tag.date-future { background: rgba(16, 185, 129, 0.2); color: #6ee7b7; border-color: rgba(16, 185, 129, 0.3); }
+        .tag.date-soon { background: rgba(245, 158, 11, 0.2); color: #fcd34d; border-color: rgba(245, 158, 11, 0.3); }
+        .tag.date-overdue { background: rgba(239, 68, 68, 0.2); color: #fca5a5; border-color: rgba(239, 68, 68, 0.3); }
+
+        .card-actions { display: flex; justify-content: flex-end; gap: 0.5rem; }
+        .card-actions button { background: transparent; border: none; padding: 0; color: var(--text-muted); font-size: 0.85rem;}
+        .card-actions button:hover { color: var(--text-main); }
+        .card-actions button.delete:hover { color: var(--danger); }
+
+        /* Modals */
+        .modal-overlay {
+            position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0, 0, 0, 0.5); backdrop-filter: blur(5px);
+            display: none; justify-content: center; align-items: center; z-index: 1000;
+        }
+        .modal-overlay.active { display: flex; }
+        .modal { width: 100%; max-width: 550px; max-height: 90vh; overflow-y: auto; padding: 2rem; }
+        .modal.large { max-width: 700px; }
+        .modal h2 { margin-bottom: 1.5rem; font-weight: 500; }
+        
+        .form-group { margin-bottom: 1.2rem; }
+        .form-group label { display: block; margin-bottom: 0.4rem; font-size: 0.85rem; color: var(--text-muted); }
+        .form-group input, .form-group select, .form-group textarea {
+            width: 100%; padding: 0.8rem; background: rgba(0,0,0,0.2);
+            border: 1px solid var(--glass-border); border-radius: 8px;
+            color: white; font-size: 0.95rem; outline: none;
+        }
+        .form-group textarea { resize: vertical; min-height: 80px; }
+        
+        .form-group input[type="date"]::-webkit-calendar-picker-indicator { filter: invert(1); cursor: pointer; }
+        .form-group input:focus, .form-group select:focus, .form-group textarea:focus { border-color: var(--accent); }
+        .form-group select option { background: var(--bg-color); color: white; }
+
+        /* Chips UI for Multi-Select */
+        .chip-container { background: rgba(0,0,0,0.2); border: 1px solid var(--glass-border); border-radius: 8px; padding: 1rem; margin-bottom: 1.2rem; }
+        .chip-container h4 { font-size: 0.85rem; color: var(--text-muted); margin-bottom: 0.8rem; font-weight: normal; }
+        .chip-group { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+        .chip {
+            padding: 0.4rem 0.8rem; border-radius: 20px; font-size: 0.8rem; cursor: pointer;
+            border: 1px solid var(--glass-border); background: rgba(255,255,255,0.05); color: var(--text-muted);
+            transition: all 0.2s ease; user-select: none;
+        }
+        .chip:hover { background: rgba(255,255,255,0.1); color: white; }
+        .chip.active { background: var(--accent); color: white; border-color: var(--accent-hover); }
+
+        .modal-actions { display: flex; justify-content: flex-end; gap: 1rem; margin-top: 2rem; }
+        .btn-text { background: transparent; border: none; padding: 0.6rem 1.2rem; }
+
+        /* Settings Grid */
+        .settings-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 2rem; }
+        @media(max-width: 600px) { .settings-grid { grid-template-columns: 1fr; } }
+        .settings-section h3 { font-size: 1rem; margin-bottom: 1rem; color: var(--accent); border-bottom: 1px solid var(--glass-border); padding-bottom: 0.5rem;}
+        .settings-list { list-style: none; margin-bottom: 1rem; max-height: 150px; overflow-y: auto; }
+        .settings-list li { display: flex; justify-content: space-between; align-items: center; padding: 0.5rem; background: rgba(0,0,0,0.2); margin-bottom: 0.3rem; border-radius: 6px; font-size: 0.9rem;}
+        .add-setting { display: flex; gap: 0.5rem; }
+        .add-setting input { flex-grow: 1; padding: 0.5rem; border-radius: 6px; border: 1px solid var(--glass-border); background: rgba(0,0,0,0.2); color: white;}
+        .add-setting button { padding: 0.5rem 1rem; }
+        .channel-list { margin-left: 1rem; font-size: 0.85rem; color: var(--text-muted); list-style: circle; }
+        .channel-item { display: flex; justify-content: space-between; margin-top: 0.2rem; }
+        .channel-item button { font-size: 0.7rem; padding: 0.1rem 0.4rem; }
+    </style>
+</head>
+<body>
+
+    <header>
+        <h1>Content Planner</h1>
+        <div class="header-actions">
+            
+            <span id="syncStatus" onclick="pullFromCloud()" title="Click to force refresh from cloud">Local Only</span>
+
+            <div class="filter-group">
+                <select id="filterType" class="glass-select" onchange="renderBoard()">
+                    <option value="">All Types</option>
+                </select>
+                <select id="filterPlatform" class="glass-select" onchange="updateMainFilterChannelVisibility()">
+                    <option value="">All Platforms</option>
+                </select>
+                <select id="filterChannel" class="glass-select" style="display:none;" onchange="renderBoard()">
+                    <option value="">All Channels</option>
+                </select>
+            </div>
+
+            <select id="sortMode" class="glass-select" onchange="renderBoard()">
+                <option value="manual">Sort: Manual (Drag & Drop)</option>
+                <option value="date">Sort: Publish Date</option>
+                <option value="priority">Sort: Priority</option>
+            </select>
+            
+            <button onclick="openCloudModal()">☁️ Sync Setup</button>
+            <button onclick="openSettingsModal()">⚙️ Tags</button>
+            <button class="primary" onclick="openIdeaModal()">+ New Idea</button>
+        </div>
+    </header>
+
+    <div class="board-container" id="board"></div>
+
+    <div class="modal-overlay" id="cloudModalOverlay">
+        <div class="glass modal">
+            <h2>Set Up GitHub Cloud Sync</h2>
+            <p style="font-size: 0.9rem; color: var(--text-muted); margin-bottom: 1.5rem; line-height: 1.4;">
+                Connect to your private GitHub Gist to automatically sync data across all your devices for free.
+            </p>
+            
+            <div class="form-group">
+                <label>GitHub Personal Access Token (PAT)</label>
+                <input type="password" id="ghToken" placeholder="ghp_xxxxxxxxxxxxxxx...">
+            </div>
+
+            <div class="form-group">
+                <label>Private Gist ID</label>
+                <input type="text" id="ghGistId" placeholder="e.g., 3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d">
+            </div>
+
+            <div class="modal-actions">
+                <button class="btn-text" onclick="closeModals()">Cancel</button>
+                <button class="primary" onclick="saveCloudSettings()">Connect & Pull Data</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal-overlay" id="ideaModalOverlay">
+        <div class="glass modal">
+            <h2 id="modalTitle">Add Content Idea</h2>
+            <input type="hidden" id="ideaId">
+            
+            <div class="form-group">
+                <label>Title / Concept</label>
+                <input type="text" id="title" placeholder="e.g., The Ultimate Desk Setup" required>
+            </div>
+
+            <div class="form-group">
+                <label>Notes / Outline (Optional)</label>
+                <textarea id="notes" rows="3" placeholder="Jot down script hooks, sponsor links, or outlines here..."></textarea>
+            </div>
+
+            <div style="display: flex; gap: 1rem;">
+                <div class="form-group" style="flex: 1;">
+                    <label>Status</label>
+                    <select id="status"></select>
+                </div>
+                <div class="form-group" style="flex: 1;">
+                    <label>Target Publish Date</label>
+                    <input type="date" id="publishDate">
+                </div>
+            </div>
+
+            <div style="display: flex; gap: 1rem;">
+                <div class="form-group" style="flex: 1;">
+                    <label>Priority</label>
+                    <select id="priority">
+                        <option value="High">High</option>
+                        <option value="Medium">Medium</option>
+                        <option value="Low">Low</option>
+                    </select>
+                </div>
+                <div class="form-group" style="flex: 1;">
+                    <label>Content Type</label>
+                    <select id="type">
+                        <option value="">-- Select Type --</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="chip-container">
+                <h4>Platforms (Select multiple)</h4>
+                <div class="chip-group" id="platform-chips"></div>
+            </div>
+
+            <div class="chip-container" id="channel-chip-container" style="display:none;">
+                <h4>Channels (Select multiple)</h4>
+                <div class="chip-group" id="channel-chips"></div>
+            </div>
+
+            <div class="modal-actions">
+                <button class="btn-text" onclick="closeModals()">Cancel</button>
+                <button class="primary" onclick="saveIdea()">Save Idea</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal-overlay" id="settingsModalOverlay">
+        <div class="glass modal large">
+            <h2>Manage System Tags</h2>
+            <div class="settings-grid">
+                <div class="settings-section">
+                    <h3>Statuses (Columns)</h3>
+                    <ul class="settings-list" id="list-statuses"></ul>
+                    <div class="add-setting">
+                        <input type="text" id="new-status" placeholder="New Status">
+                        <button onclick="addSimpleSetting('statuses', 'new-status')">Add</button>
+                    </div>
+                </div>
+
+                <div class="settings-section">
+                    <h3>Content Types</h3>
+                    <ul class="settings-list" id="list-types"></ul>
+                    <div class="add-setting">
+                        <input type="text" id="new-type" placeholder="New Content Type">
+                        <button onclick="addSimpleSetting('contentTypes', 'new-type')">Add</button>
+                    </div>
+                </div>
+
+                <div class="settings-section" style="grid-column: 1 / -1;">
+                    <h3>Platforms & Channels</h3>
+                    <ul class="settings-list" id="list-platforms" style="max-height: 250px;"></ul>
+                    <div style="display: flex; gap: 1rem; align-items: flex-start; flex-wrap: wrap;">
+                        <div class="add-setting" style="flex: 1; min-width: 250px;">
+                            <input type="text" id="new-platform" placeholder="New Platform">
+                            <button onclick="addPlatform()">Add</button>
+                        </div>
+                        <div class="add-setting" style="flex: 1; min-width: 300px;">
+                            <select id="select-platform-for-channel" style="width: 40%; padding: 0.5rem; background: rgba(0,0,0,0.2); color: white; border: 1px solid var(--glass-border); border-radius: 6px;"></select>
+                            <input type="text" id="new-channel" placeholder="New Channel" style="width: 40%;">
+                            <button onclick="addChannel()" style="width: 20%;">Add</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-actions">
+                <button class="primary" onclick="closeModals()">Done</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // --- Data Structure & Initialization ---
+        const GIST_FILENAME = "content_planner_data.json";
+        
+        const defaultSettings = {
+            statuses: ["Idea", "Drafting", "Scripting", "Filming", "Editing", "Approved", "Upload", "A/B Test Thumbnail"],
+            priorities: ["High", "Medium", "Low"], 
+            contentTypes: ["Long Form Video", "Short Form Video", "Live Stream", "Community Post"],
+            platforms: {
+                "YouTube": ["Tech Storytelling", "Educational", "Gaming"],
+                "Twitch": ["Main Stream", "VODs"],
+                "Instagram": ["Reels", "Main Feed"]
+            }
+        };
+
+        let settings = JSON.parse(localStorage.getItem('contentPlannerSettings')) || defaultSettings;
+        settings.priorities = ["High", "Medium", "Low"]; 
+        let ideas = JSON.parse(localStorage.getItem('contentPlannerIdeas')) || [];
+
+        // --- SILENT MIGRATION: Convert old properties ---
+        ideas = ideas.map(idea => {
+            if (idea.platform && !idea.platforms) idea.platforms = [idea.platform];
+            if (idea.channel && !idea.channels) idea.channels = [idea.channel];
+            if (idea.notes === undefined) idea.notes = ''; // Add notes property if missing
+            delete idea.platform; 
+            delete idea.channel;
+            return idea;
+        });
+
+        let modalSelectedPlatforms = [];
+        let modalSelectedChannels = [];
+
+        function persistData() {
+            localStorage.setItem('contentPlannerSettings', JSON.stringify(settings));
+            localStorage.setItem('contentPlannerIdeas', JSON.stringify(ideas));
+            if (getGithubAuth().token && getGithubAuth().gistId) pushToCloud();
+        }
+
+        function init() { 
+            renderFilters();
+            renderBoard(); 
+            pullFromCloud();
+        }
+
+        // --- GitHub Cloud Sync Engine ---
+        function getGithubAuth() {
+            return {
+                token: localStorage.getItem('cp_gh_token'),
+                gistId: localStorage.getItem('cp_gh_gist_id')
+            };
+        }
+
+        function openCloudModal() {
+            const auth = getGithubAuth();
+            document.getElementById('ghToken').value = auth.token || '';
+            document.getElementById('ghGistId').value = auth.gistId || '';
+            document.getElementById('cloudModalOverlay').classList.add('active');
+        }
+
+        function saveCloudSettings() {
+            const token = document.getElementById('ghToken').value.trim();
+            const gistId = document.getElementById('ghGistId').value.trim();
+            localStorage.setItem('cp_gh_token', token);
+            localStorage.setItem('cp_gh_gist_id', gistId);
+            closeModals();
+            pullFromCloud(true);
+        }
+
+        async function pullFromCloud(isInitialSetup = false) {
+            const auth = getGithubAuth();
+            if(!auth.token || !auth.gistId) return;
+
+            document.getElementById('syncStatus').textContent = '⏳ Pulling...';
+
+            try {
+                const response = await fetch(`https://api.github.com/gists/${auth.gistId}`, {
+                    headers: { 'Authorization': `token ${auth.token}`, 'Accept': 'application/vnd.github.v3+json', 'Cache-Control': 'no-cache' }
+                });
+
+                if(response.ok) {
+                    const data = await response.json();
+                    if(data.files && data.files[GIST_FILENAME]) {
+                        const contentStr = data.files[GIST_FILENAME].content;
+                        if(contentStr && contentStr.trim() !== '{}') {
+                            const cloudData = JSON.parse(contentStr);
+                            if(cloudData.settings && cloudData.ideas) {
+                                settings = cloudData.settings;
+                                ideas = cloudData.ideas.map(idea => {
+                                    if (idea.platform && !idea.platforms) idea.platforms = [idea.platform];
+                                    if (idea.channel && !idea.channels) idea.channels = [idea.channel];
+                                    if (idea.notes === undefined) idea.notes = '';
+                                    delete idea.platform; delete idea.channel;
+                                    return idea;
+                                });
+
+                                localStorage.setItem('contentPlannerSettings', JSON.stringify(settings));
+                                localStorage.setItem('contentPlannerIdeas', JSON.stringify(ideas));
+                                renderFilters();
+                                renderBoard();
+                                document.getElementById('syncStatus').textContent = '☁️ Synced';
+                                return;
+                            }
+                        }
+                    }
+                    if(isInitialSetup) pushToCloud();
+                    else document.getElementById('syncStatus').textContent = '☁️ Synced';
+                } else {
+                    document.getElementById('syncStatus').textContent = '❌ Auth Error';
+                }
+            } catch (e) { document.getElementById('syncStatus').textContent = '❌ Offline'; }
+        }
+
+        async function pushToCloud() {
+            const auth = getGithubAuth();
+            if(!auth.token || !auth.gistId) return;
+            document.getElementById('syncStatus').textContent = '⏳ Syncing...';
+            const payload = { settings: settings, ideas: ideas, lastUpdated: new Date().toISOString() };
+            try {
+                const response = await fetch(`https://api.github.com/gists/${auth.gistId}`, {
+                    method: 'PATCH',
+                    headers: { 'Authorization': `token ${auth.token}`, 'Accept': 'application/vnd.github.v3+json' },
+                    body: JSON.stringify({ files: { [GIST_FILENAME]: { content: JSON.stringify(payload) } } })
+                });
+                if(response.ok) document.getElementById('syncStatus').textContent = '☁️ Synced';
+                else document.getElementById('syncStatus').textContent = '❌ Sync Failed';
+            } catch (e) { document.getElementById('syncStatus').textContent = '❌ Offline'; }
+        }
+
+        // --- Helper Logic ---
+        function formatDate(dateString) {
+            if (!dateString) return '';
+            const [year, month, day] = dateString.split('-');
+            const date = new Date(year, month - 1, day);
+            return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+        }
+
+        function getDateCategory(dateString) {
+            if (!dateString) return '';
+            const [year, month, day] = dateString.split('-');
+            const targetDate = new Date(year, month - 1, day);
+            targetDate.setHours(0, 0, 0, 0);
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+            const diffTime = targetDate - today;
+            const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)); 
+            if (diffDays < 0) return 'date-overdue'; 
+            if (diffDays <= 3) return 'date-soon';   
+            return 'date-future';                    
+        }
+
+        function populateDropdown(selectId, optionsArray, includeEmpty = false, emptyText = '-- Select --') {
+            const select = document.getElementById(selectId);
+            select.innerHTML = includeEmpty ? `<option value="">${emptyText}</option>` : '';
+            optionsArray.forEach(opt => select.innerHTML += `<option value="${opt}">${opt}</option>`);
+        }
+
+        // --- Filter Logic ---
+        function renderFilters() {
+            const currType = document.getElementById('filterType').value;
+            const currPlatform = document.getElementById('filterPlatform').value;
+            
+            populateDropdown('filterType', settings.contentTypes, true, 'All Types');
+            populateDropdown('filterPlatform', Object.keys(settings.platforms), true, 'All Platforms');
+
+            document.getElementById('filterType').value = settings.contentTypes.includes(currType) ? currType : '';
+            document.getElementById('filterPlatform').value = Object.keys(settings.platforms).includes(currPlatform) ? currPlatform : '';
+            
+            updateMainFilterChannelVisibility();
+        }
+
+        function updateMainFilterChannelVisibility() {
+            const platform = document.getElementById('filterPlatform').value;
+            const channelSelect = document.getElementById('filterChannel');
+            const currChannel = channelSelect.value;
+
+            if (platform && settings.platforms[platform] && settings.platforms[platform].length > 0) {
+                channelSelect.style.display = 'inline-block';
+                populateDropdown('filterChannel', settings.platforms[platform], true, 'All Channels');
+                channelSelect.value = settings.platforms[platform].includes(currChannel) ? currChannel : '';
+            } else {
+                channelSelect.style.display = 'none';
+                channelSelect.value = '';
+            }
+            renderBoard();
+        }
+
+        // --- Board Rendering & Logic ---
+        function renderBoard() {
+            const board = document.getElementById('board');
+            const sortMode = document.getElementById('sortMode').value;
+            
+            const filterType = document.getElementById('filterType').value;
+            const filterPlatform = document.getElementById('filterPlatform').value;
+            const filterChannel = document.getElementById('filterChannel').value;
+
+            board.innerHTML = '';
+
+            settings.statuses.forEach(colName => {
+                const colDiv = document.createElement('div');
+                colDiv.className = 'glass column';
+                
+                let colIdeas = ideas.filter(idea => idea.status === colName);
+                
+                if (filterType) colIdeas = colIdeas.filter(idea => idea.type === filterType);
+                if (filterPlatform) colIdeas = colIdeas.filter(idea => (idea.platforms || []).includes(filterPlatform));
+                if (filterChannel) colIdeas = colIdeas.filter(idea => (idea.channels || []).includes(filterChannel));
+
+                if (sortMode !== 'manual') {
+                    colIdeas.sort((a, b) => {
+                        if (sortMode === 'date') {
+                            if (!a.publishDate) return 1; 
+                            if (!b.publishDate) return -1;
+                            return new Date(a.publishDate) - new Date(b.publishDate);
+                        }
+                        if (sortMode === 'priority') {
+                            const idxA = settings.priorities.indexOf(a.priority);
+                            const idxB = settings.priorities.indexOf(b.priority);
+                            return (idxA === -1 ? 99 : idxA) - (idxB === -1 ? 99 : idxB);
+                        }
+                        return 0;
+                    });
+                }
+                
+                colDiv.innerHTML = `
+                    <div class="column-header">
+                        <span class="status-name">${colName}</span>
+                        <span class="status-count">${colIdeas.length}</span>
+                    </div>
+                    <div class="column-body" ondragover="dragOver(event)" ondrop="drop(event)">
+                    </div>
+                `;
+                
+                const colBody = colDiv.querySelector('.column-body');
+                
+                colIdeas.forEach(idea => {
+                    const card = document.createElement('div');
+                    card.className = 'glass card';
+                    card.draggable = true;
+                    card.dataset.id = idea.id;
+                    card.ondragstart = (e) => dragStart(e, card);
+                    card.ondragend = dragEnd;
+
+                    let dateTag = '';
+                    if (idea.publishDate) {
+                        const dateColorClass = getDateCategory(idea.publishDate);
+                        dateTag = `<span class="tag ${dateColorClass}">📅 ${formatDate(idea.publishDate)}</span>`;
+                    }
+                    
+                    const priorityClass = `priority-${idea.priority.toLowerCase()}`;
+                    const platformsHtml = (idea.platforms || []).map(p => `<span class="tag">${p}</span>`).join('');
+                    const channelsHtml = (idea.channels || []).map(c => `<span class="tag" style="border-color: var(--accent); color: white;">${c}</span>`).join('');
+                    
+                    // Notes Preview
+                    const notesHtml = idea.notes ? `<div class="card-notes">${idea.notes}</div>` : '';
+
+                    card.innerHTML = `
+                        <div class="card-title">${idea.title}</div>
+                        ${notesHtml}
+                        <div class="tags">
+                            ${dateTag}
+                            <span class="tag ${priorityClass}">${idea.priority}</span>
+                            ${idea.type ? `<span class="tag">${idea.type}</span>` : ''}
+                            ${platformsHtml}
+                            ${channelsHtml}
+                        </div>
+                        <div class="card-actions">
+                            <button onclick="editIdea('${idea.id}')">Edit</button>
+                            <button class="delete" onclick="deleteIdea('${idea.id}')">Delete</button>
+                        </div>
+                    `;
+                    colBody.appendChild(card);
+                });
+                board.appendChild(colDiv);
+            });
+        }
+
+        // --- Drag & Drop System ---
+        function dragStart(ev, cardElement) {
+            ev.dataTransfer.effectAllowed = 'move';
+            setTimeout(() => cardElement.classList.add('dragging'), 0);
+        }
+
+        function dragEnd(ev) { ev.target.classList.remove('dragging'); }
+
+        function dragOver(ev) {
+            ev.preventDefault(); 
+            const container = ev.currentTarget;
+            const draggable = document.querySelector('.dragging');
+            if (!draggable) return;
+
+            const afterElement = getDragAfterElement(container, ev.clientY);
+            if (afterElement == null) container.appendChild(draggable);
+            else container.insertBefore(draggable, afterElement);
+        }
+
+        function getDragAfterElement(container, y) {
+            const draggableElements = [...container.querySelectorAll('.card:not(.dragging)')];
+            return draggableElements.reduce((closest, child) => {
+                const box = child.getBoundingClientRect();
+                const offset = y - box.top - box.height / 2;
+                if (offset < 0 && offset > closest.offset) return { offset: offset, element: child };
+                else return closest;
+            }, { offset: Number.NEGATIVE_INFINITY }).element;
+        }
+
+        function drop(ev) {
+            ev.preventDefault();
+            const draggable = document.querySelector('.dragging');
+            if(!draggable) return;
+
+            const ideaId = draggable.dataset.id;
+            const ideaIndex = ideas.findIndex(i => i.id === ideaId);
+            const idea = ideas[ideaIndex];
+
+            const col = draggable.closest('.column');
+            const newStatus = col.querySelector('.status-name').textContent;
+            idea.status = newStatus;
+
+            ideas.splice(ideaIndex, 1);
+
+            const nextSibling = draggable.nextElementSibling;
+            if (nextSibling && nextSibling.classList.contains('card')) {
+                const nextId = nextSibling.dataset.id;
+                const nextIndex = ideas.findIndex(i => i.id === nextId);
+                ideas.splice(nextIndex, 0, idea);
+            } else {
+                ideas.push(idea);
+            }
+
+            persistData();
+            document.getElementById('sortMode').value = 'manual';
+            renderBoard(); 
+        }
+
+        // --- New Multi-Select Modal Logic (Chips) ---
+        function renderPlatformChips() {
+            const container = document.getElementById('platform-chips');
+            container.innerHTML = '';
+            
+            Object.keys(settings.platforms).forEach(plat => {
+                const chip = document.createElement('div');
+                chip.className = `chip ${modalSelectedPlatforms.includes(plat) ? 'active' : ''}`;
+                chip.textContent = plat;
+                chip.onclick = () => {
+                    if(modalSelectedPlatforms.includes(plat)) {
+                        modalSelectedPlatforms = modalSelectedPlatforms.filter(p => p !== plat);
+                    } else {
+                        modalSelectedPlatforms.push(plat);
+                    }
+                    renderPlatformChips(); 
+                    renderChannelChips(); 
+                };
+                container.appendChild(chip);
+            });
+        }
+
+        function renderChannelChips() {
+            const container = document.getElementById('channel-chips');
+            const group = document.getElementById('channel-chip-container');
+            container.innerHTML = '';
+            
+            let availableChannels = [];
+            modalSelectedPlatforms.forEach(plat => {
+                if(settings.platforms[plat]) {
+                    availableChannels = availableChannels.concat(settings.platforms[plat]);
+                }
+            });
+            
+            modalSelectedChannels = modalSelectedChannels.filter(c => availableChannels.includes(c));
+
+            if(availableChannels.length > 0) {
+                group.style.display = 'block';
+                availableChannels.forEach(ch => {
+                    const chip = document.createElement('div');
+                    chip.className = `chip ${modalSelectedChannels.includes(ch) ? 'active' : ''}`;
+                    chip.textContent = ch;
+                    chip.onclick = () => {
+                        if(modalSelectedChannels.includes(ch)) {
+                            modalSelectedChannels = modalSelectedChannels.filter(c => c !== ch);
+                        } else {
+                            modalSelectedChannels.push(ch);
+                        }
+                        renderChannelChips(); 
+                    };
+                    container.appendChild(chip);
+                });
+            } else {
+                group.style.display = 'none';
+            }
+        }
+
+        function openIdeaModal() {
+            document.getElementById('modalTitle').textContent = 'Add Content Idea';
+            document.getElementById('ideaId').value = '';
+            document.getElementById('title').value = '';
+            document.getElementById('notes').value = ''; 
+            document.getElementById('publishDate').value = ''; 
+            document.getElementById('priority').value = 'Medium';
+            
+            populateDropdown('status', settings.statuses);
+            populateDropdown('type', settings.contentTypes, true);
+            
+            modalSelectedPlatforms = [];
+            modalSelectedChannels = [];
+            renderPlatformChips();
+            renderChannelChips();
+
+            document.getElementById('ideaModalOverlay').classList.add('active');
+        }
+
+        function editIdea(id) {
+            const idea = ideas.find(i => i.id === id);
+            if (!idea) return;
+
+            document.getElementById('modalTitle').textContent = 'Edit Content Idea';
+            document.getElementById('ideaId').value = idea.id;
+            document.getElementById('title').value = idea.title;
+            document.getElementById('notes').value = idea.notes || ''; 
+            document.getElementById('publishDate').value = idea.publishDate || ''; 
+
+            populateDropdown('status', settings.statuses);
+            populateDropdown('type', settings.contentTypes, true);
+
+            document.getElementById('status').value = idea.status;
+            document.getElementById('priority').value = idea.priority || 'Medium';
+            document.getElementById('type').value = idea.type || '';
+            
+            modalSelectedPlatforms = idea.platforms ? [...idea.platforms] : [];
+            modalSelectedChannels = idea.channels ? [...idea.channels] : [];
+            renderPlatformChips();
+            renderChannelChips();
+
+            document.getElementById('ideaModalOverlay').classList.add('active');
+        }
+
+        function saveIdea() {
+            const id = document.getElementById('ideaId').value || Date.now().toString();
+            const title = document.getElementById('title').value.trim();
+            if (!title) return alert('Title is required.');
+
+            const ideaData = {
+                id, title,
+                notes: document.getElementById('notes').value.trim(),
+                status: document.getElementById('status').value,
+                publishDate: document.getElementById('publishDate').value,
+                priority: document.getElementById('priority').value,
+                type: document.getElementById('type').value,
+                platforms: [...modalSelectedPlatforms], 
+                channels: [...modalSelectedChannels]
+            };
+
+            const existingIndex = ideas.findIndex(i => i.id === id);
+            if (existingIndex > -1) ideas[existingIndex] = ideaData;
+            else ideas.push(ideaData);
+
+            persistData();
+            renderBoard();
+            closeModals();
+        }
+
+        function deleteIdea(id) {
+            if(confirm('Delete this idea?')) {
+                ideas = ideas.filter(i => i.id !== id);
+                persistData();
+                renderBoard();
+            }
+        }
+
+        // --- Settings Management ---
+        function openSettingsModal() {
+            renderSettingsLists();
+            document.getElementById('settingsModalOverlay').classList.add('active');
+        }
+
+        function renderSettingsLists() {
+            renderSimpleList('statuses', 'list-statuses');
+            renderSimpleList('contentTypes', 'list-types');
+
+            const platList = document.getElementById('list-platforms');
+            const platSelect = document.getElementById('select-platform-for-channel');
+            platList.innerHTML = '';
+            platSelect.innerHTML = '';
+
+            Object.keys(settings.platforms).forEach(plat => {
+                platSelect.innerHTML += `<option value="${plat}">${plat}</option>`;
+                let channelsHTML = settings.platforms[plat].map(ch => 
+                    `<li class="channel-item"><span>- ${ch}</span><button class="danger-sm" onclick="removeChannel('${plat}', '${ch}')">x</button></li>`
+                ).join('');
+                platList.innerHTML += `<li style="flex-direction: column; align-items: flex-start;"><div style="width: 100%; display: flex; justify-content: space-between;"><strong>${plat}</strong><button class="danger-sm" onclick="removePlatform('${plat}')">Remove</button></div><ul class="channel-list" style="width: 100%;">${channelsHTML}</ul></li>`;
+            });
+        }
+
+        function renderSimpleList(settingKey, elementId) {
+            const ul = document.getElementById(elementId);
+            ul.innerHTML = settings[settingKey].map((item, index) => `<li><span>${item}</span><button class="danger-sm" onclick="removeSimpleSetting('${settingKey}', ${index})">x</button></li>`).join('');
+        }
+
+        function addSimpleSetting(settingKey, inputId) {
+            const val = document.getElementById(inputId).value.trim();
+            if (val && !settings[settingKey].includes(val)) {
+                settings[settingKey].push(val);
+                document.getElementById(inputId).value = '';
+                persistData();
+                renderSettingsLists();
+                renderFilters();
+            }
+        }
+
+        function removeSimpleSetting(settingKey, index) {
+            if (confirm("Remove this tag?")) {
+                const removedValue = settings[settingKey][index];
+                settings[settingKey].splice(index, 1);
+                
+                if (settingKey === 'statuses' && settings.statuses.length > 0) {
+                    ideas.forEach(idea => { if (idea.status === removedValue) idea.status = settings.statuses[0]; });
+                }
+                
+                persistData();
+                renderSettingsLists();
+                renderFilters();
+            }
+        }
+
+        function addPlatform() {
+            const plat = document.getElementById('new-platform').value.trim();
+            if (plat && !settings.platforms[plat]) {
+                settings.platforms[plat] = [];
+                document.getElementById('new-platform').value = '';
+                persistData();
+                renderSettingsLists();
+                renderFilters();
+            }
+        }
+
+        function removePlatform(plat) {
+            if (confirm(`Remove platform '${plat}' and all its channels?`)) {
+                delete settings.platforms[plat];
+                persistData();
+                renderSettingsLists();
+                renderFilters();
+            }
+        }
+
+        function addChannel() {
+            const plat = document.getElementById('select-platform-for-channel').value;
+            const ch = document.getElementById('new-channel').value.trim();
+            if (plat && ch && !settings.platforms[plat].includes(ch)) {
+                settings.platforms[plat].push(ch);
+                document.getElementById('new-channel').value = '';
+                persistData();
+                renderSettingsLists();
+                renderFilters();
+            }
+        }
+
+        function removeChannel(plat, ch) {
+            settings.platforms[plat] = settings.platforms[plat].filter(c => c !== ch);
+            persistData();
+            renderSettingsLists();
+            renderFilters();
+        }
+
+        function closeModals() {
+            document.getElementById('cloudModalOverlay').classList.remove('active');
+            document.getElementById('ideaModalOverlay').classList.remove('active');
+            document.getElementById('settingsModalOverlay').classList.remove('active');
+        }
+
+        document.querySelectorAll('.modal-overlay').forEach(overlay => {
+            overlay.addEventListener('click', e => { if (e.target === overlay) closeModals(); });
+        });
+
+        init();
+    </script>
+</body>
+</html>
